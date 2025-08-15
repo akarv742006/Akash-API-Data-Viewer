@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Akash API Data Viewer</title>
+<style>
+  /* ========= THEME ========= */
+  :root {
+    --bg: #f7fcfb;
+    --surface: #ffffff;
+    --text: #1f2a2e;
+    --muted: #64757b;
+    --primary: #16a085;   /* fresh mint-teal */
+    --primary-600: #129077;
+    --accent: #2f80ed;    /* soft blue */
+    --border: #e5efed;
+    --shadow: 0 4px 16px rgba(32, 60, 52, 0.08);
+    --skeleton1: #f0f6f5;
+    --skeleton2: #e6efed;
+  }
+  [data-theme="dark"] {
+    --bg: #0f1416;
+    --surface: #151c1e;
+    --text: #e6eef0;
+    --muted: #9ab0b6;
+    --primary: #21c7a6;
+    --primary-600: #1eb398;
+    --accent: #6aa9ff;
+    --border: #1f292c;
+    --shadow: 0 6px 20px rgba(0,0,0,0.35);
+    --skeleton1: #1a2225;
+    --skeleton2: #223034;
+  }
+
+  /* ========= LAYOUT ========= */
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100svh;
+  }
+
+  /* Header / Topbar */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+  .topbar-inner {
+    max-width: 1200px; margin: 0 auto; padding: 14px 16px;
+    display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 12px; font-weight: 700; letter-spacing: .3px;
+  }
+  .brand-badge {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+  }
+
+  .controls {
+    display: flex; gap: 10px; align-items: center;
+  }
+  .input, .select, .button {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    outline: none;
+  }
+  .input { min-width: 240px; }
+  .select { min-width: 160px; }
+  .button {
+    background: var(--primary);
+    color: #fff;
+    border-color: transparent;
+    cursor: pointer;
+    transition: transform .06s ease, filter .2s ease, background .2s ease;
+  }
+  .button:hover { filter: brightness(1.03); background: var(--primary-600); }
+  .button:active { transform: translateY(1px); }
+
+  .mode-toggle {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 8px; padding: 10px 12px; cursor: pointer;
+  }
+
+  /* Main */
+  main { max-width: 1200px; margin: 18px auto; padding: 0 16px 32px; width: 100%; }
+  .status { margin: 12px 0 8px; color: var(--muted); font-size: 14px; }
+
+  /* Grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+    gap: 16px;
+  }
+
+  /* Card */
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; box-shadow: var(--shadow);
+    transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+  }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0,0,0,0.08); }
+  .card h3 { margin: 0 0 6px; font-size: 16px; color: var(--text); }
+  .meta { margin: 0; font-size: 13px; color: var(--muted); }
+  .card-actions { margin-top: 12px; display: flex; gap: 8px; }
+  .ghost {
+    border: 1px dashed var(--border); background: transparent; color: var(--text);
+  }
+
+  /* Skeletons */
+  .skeleton {
+    border-radius: 12px; height: 120px; border: 1px solid var(--border);
+    background: linear-gradient(90deg, var(--skeleton1), var(--skeleton2), var(--skeleton1));
+    background-size: 200% 100%; animation: shimmer 1.4s infinite linear;
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  /* Pagination */
+  .pagination {
+    margin-top: 20px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+  }
+  .page-btn {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    padding: 8px 12px; border-radius: 8px; cursor: pointer;
+  }
+  .page-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+  /* Error box */
+  .error {
+    background: #ffecec; color: #a53737; border: 1px solid #f5c7c7;
+    padding: 12px 14px; border-radius: 10px; margin: 14px 0;
+  }
+  [data-theme="dark"] .error {
+    background: #2a1f1f; color: #f0c9c9; border-color: #533a3a;
+  }
+
+  /* Modal */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none;
+    align-items: center; justify-content: center; padding: 20px; z-index: 100;
+  }
+  .modal {
+    width: min(620px, 100%); background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .modal-header { display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .modal-body { padding: 16px; display: grid; gap: 8px; }
+  .modal-title { margin: 0; font-size: 18px; }
+  .close-btn { background: transparent; border: none; color: var(--muted); font-size: 20px; cursor: pointer; }
+
+  .kv { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; align-items: baseline; }
+  .kv label { color: var(--muted); font-size: 13px; }
+
+  /* Footer */
+  footer { border-top: 1px solid var(--border); background: var(--surface); color: var(--muted);
+    padding: 14px 16px; text-align: center; }
+
+  /* Responsive tweaks */
+  @media (max-width: 720px) {
+    .topbar-inner { grid-template-columns: 1fr auto; gap: 10px; }
+    .controls { grid-column: 1 / -1; justify-content: stretch; }
+    .input { flex: 1; min-width: 0; }
+  }
+</style>
+</head>
+<body data-theme="light">
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-badge" aria-hidden="true"></div>
+        <div>Akash User Directory</div>
+      </div>
+
+      <div class="controls">
+        <input id="search" class="input" type="search" placeholder="Search by name or email..." />
+        <select id="sort" class="select" aria-label="Sort users">
+          <option value="">Sort</option>
+          <option value="nameAsc">Name (A–Z)</option>
+          <option value="nameDesc">Name (Z–A)</option>
+          <option value="emailAsc">Email (A–Z)</option>
+          <option value="emailDesc">Email (Z–A)</option>
+        </select>
+        <button id="reload" class="button">Reload</button>
+      </div>
+
+      <button id="modeToggle" class="mode-toggle" title="Toggle light/dark mode">Theme</button>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main>
+    <div id="status" class="status"></div>
+
+    <div id="grid" class="grid" aria-live="polite" aria-busy="true">
+      <!-- skeletons (initial) -->
+    </div>
+
+    <nav id="pagination" class="pagination"></nav>
+
+    <div id="errorBox" class="error" style="display:none;"></div>
+  </main>
+
+  <!-- Modal -->
+  <div id="backdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalTitle" class="modal-title">User Details</h3>
+        <button id="closeModal" class="close-btn" aria-label="Close">×</button>
+      </div>
+      <div id="modalBody" class="modal-body">
+        <!-- details injected -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer>© 2025 • All rights are reseived AKASH K</footer>
+
+<script>
+  // ======= STATE =======
+  const API_URL = 'https://jsonplaceholder.typicode.com/users';
+  const PAGE_SIZE = 6;
+
+  let allUsers = [];
+  let filtered = [];
+  let currentPage = 1;
+
+  // ======= DOM =======
+  const grid = document.getElementById('grid');
+  const statusEl = document.getElementById('status');
+  const errorBox = document.getElementById('errorBox');
+  const pagination = document.getElementById('pagination');
+  const searchEl = document.getElementById('search');
+  const sortEl = document.getElementById('sort');
+  const reloadBtn = document.getElementById('reload');
+  const modeToggle = document.getElementById('modeToggle');
+
+  const backdrop = document.getElementById('backdrop');
+  const closeModalBtn = document.getElementById('closeModal');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalBody = document.getElementById('modalBody');
+
+  // ======= UTIL =======
+  const debounce = (fn, delay=200) => {
+    let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), delay); };
+  };
+
+  function setBusy(busy) {
+    grid.setAttribute('aria-busy', String(busy));
+  }
+
+  function showSkeletons(count = PAGE_SIZE) {
+    grid.innerHTML = '';
+    for (let i = 0; i < count; i++) {
+      const sk = document.createElement('div');
+      sk.className = 'skeleton';
+      grid.appendChild(sk);
+    }
+  }
+
+  function clearError() {
+    errorBox.style.display = 'none';
+    errorBox.textContent = '';
+  }
+
+  function showError(msg) {
+    errorBox.textContent = msg;
+    errorBox.style.display = 'block';
+  }
+
+  // ======= FETCH =======
+  async function fetchUsers() {
+    try {
+      clearError();
+      setBusy(true);
+      statusEl.textContent = 'Loading users...';
+      showSkeletons(6);
+
+      const res = await fetch(API_URL, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      allUsers = await res.json();
+
+      filtered = [...allUsers];
+      currentPage = 1;
+      applyFiltersAndRender();
+      statusEl.textContent = '';
+    } catch (err) {
+      grid.innerHTML = '';
+      showError('Unable to load data. Check your internet connection and try again.');
+      statusEl.textContent = '';
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ======= FILTER/SORT/PAGINATE =======
+  function applyFiltersAndRender() {
+    const q = (searchEl.value || '').trim().toLowerCase();
+    let data = [...allUsers];
+
+    if (q) {
+      data = data.filter(u =>
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q)
+      );
+    }
+
+    switch (sortEl.value) {
+      case 'nameAsc':   data.sort((a,b)=>a.name.localeCompare(b.name)); break;
+      case 'nameDesc':  data.sort((a,b)=>b.name.localeCompare(a.name)); break;
+      case 'emailAsc':  data.sort((a,b)=>a.email.localeCompare(b.email)); break;
+      case 'emailDesc': data.sort((a,b)=>b.email.localeCompare(a.email)); break;
+    }
+
+    filtered = data;
+    renderPage();
+    renderPagination();
+  }
+
+  function renderPage() {
+    grid.innerHTML = '';
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const slice = filtered.slice(start, start + PAGE_SIZE);
+
+    if (slice.length === 0) {
+      grid.innerHTML = '<div class="status">No results found.</div>';
+      return;
+    }
+
+    slice.forEach(user => grid.appendChild(userCard(user)));
+  }
+
+  function renderPagination() {
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    pagination.innerHTML = '';
+
+    const mkBtn = (label, page, disabled=false, active=false) => {
+      const btn = document.createElement('button');
+      btn.className = 'page-btn' + (active ? ' active' : '');
+      btn.textContent = label;
+      btn.disabled = disabled;
+      btn.addEventListener('click', () => { currentPage = page; renderPage(); renderPagination(); });
+      return btn;
+    };
+
+    pagination.appendChild(mkBtn('Prev', Math.max(1, currentPage - 1), currentPage === 1));
+    for (let p = 1; p <= totalPages; p++) {
+      if (p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1) {
+        pagination.appendChild(mkBtn(String(p), p, false, p === currentPage));
+      } else if (Math.abs(p - currentPage) === 2) {
+        const ellipsis = document.createElement('span'); ellipsis.textContent = '…';
+        ellipsis.style.padding = '8px 6px'; pagination.appendChild(ellipsis);
+      }
+    }
+    pagination.appendChild(mkBtn('Next', Math.min(totalPages, currentPage + 1), currentPage === totalPages));
+  }
+
+  // ======= COMPONENTS =======
+  function userCard(u) {
+    const el = document.createElement('article');
+    el.className = 'card';
+    el.innerHTML = `
+      <h3>${escapeHtml(u.name)}</h3>
+      <p class="meta"><strong>Email:</strong> ${escapeHtml(u.email)}</p>
+      <p class="meta"><strong>Address:</strong> ${escapeHtml(u.address.street)}, ${escapeHtml(u.address.city)}</p>
+      <div class="card-actions">
+        <button class="button" data-id="${u.id}">View</button>
+        <button class="button ghost" data-copy="${u.email}">Copy Email</button>
+      </div>
+    `;
+    // actions
+    el.querySelector('[data-id]').addEventListener('click', () => openModal(u));
+    el.querySelector('[data-copy]').addEventListener('click', async (e) => {
+      const email = e.currentTarget.getAttribute('data-copy');
+      try { await navigator.clipboard.writeText(email); e.currentTarget.textContent = 'Copied'; setTimeout(()=>e.currentTarget.textContent='Copy Email', 1200); } catch {}
+    });
+    return el;
+  }
+
+  function escapeHtml(s='') {
+    return String(s)
+      .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
+      .replaceAll('"','&quot;').replaceAll("'",'&#039;');
+  }
+
+  // ======= MODAL =======
+  function openModal(u) {
+    modalTitle.textContent = u.name;
+    modalBody.innerHTML = `
+      <div class="kv">
+        <label>Email</label><div>${escapeHtml(u.email)}</div>
+        <label>Phone</label><div>${escapeHtml(u.phone)}</div>
+        <label>Website</label><div><a href="https://${escapeHtml(u.website)}" target="_blank" rel="noopener">${escapeHtml(u.website)}</a></div>
+        <label>Company</label><div>${escapeHtml(u.company?.name || '')}</div>
+        <label>Address</label><div>${escapeHtml(u.address.street)}, ${escapeHtml(u.address.suite)}, ${escapeHtml(u.address.city)} ${escapeHtml(u.address.zipcode)}</div>
+        <label>Geo</label><div>lat ${escapeHtml(u.address.geo?.lat)}, lng ${escapeHtml(u.address.geo?.lng)}</div>
+      </div>
+    `;
+    backdrop.style.display = 'flex';
+    backdrop.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeModal() {
+    backdrop.style.display = 'none';
+    backdrop.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+
+  backdrop.addEventListener('click', (e)=>{ if (e.target === backdrop) closeModal(); });
+  closeModalBtn.addEventListener('click', closeModal);
+  window.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') closeModal(); });
+
+  // ======= EVENTS =======
+  reloadBtn.addEventListener('click', fetchUsers);
+  searchEl.addEventListener('input', debounce(()=>{ currentPage = 1; applyFiltersAndRender(); }, 120));
+  sortEl.addEventListener('change', ()=>{ currentPage = 1; applyFiltersAndRender(); });
+
+  modeToggle.addEventListener('click', () => {
+    const root = document.body;
+    const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('ud-theme', next); } catch {}
+  });
+
+  // Persist theme
+  (function initTheme(){
+    try {
+      const saved = localStorage.getItem('ud-theme');
+      if (saved) document.body.setAttribute('data-theme', saved);
+    } catch {}
+  })();
+
+  // ======= INIT =======
+  showSkeletons(6);
+  fetchUsers();
+</script>
+</body>
+</html>
